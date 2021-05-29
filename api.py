@@ -1,13 +1,35 @@
 #!/usr/bin/env python3
 
 # import relevant libraries
-from flask import Flask, jsonify, request, render_template
-import json
-import sys 
-from joblib import dump, load
-import traceback
+from flask import Flask, request, render_template
+from joblib import load
 import pandas as pd
 import numpy as np
+
+
+# Load model
+loaded_model = load('random_forest_model.joblib')
+scaler = load('scaler.joblib')
+
+print('@@ Model Loaded!')
+
+def predict_survivors(data_ints):
+    """ Get Data from Form and Predict Class """
+
+    # convert list of tuples to an array of appropriate shape and then to a dataframe
+    query_data = np.array(data_ints).reshape(1, -1)
+    
+    # scale the data using standard scaler
+    scaled_data = scaler.transform(query_data)
+
+    # predict the scaled data
+    result = loaded_model.predict(scaled_data)
+
+    print('@@ Scaled Data = ', scaled_data)
+    print('@@ Raw result = ', result)
+        
+    return result
+
 
 # api definition
 app = Flask(__name__)
@@ -18,56 +40,38 @@ def display_form():
     return render_template('./index.html')
     
 
+# ---------------------------------------------------------------------------------------------------
 # define the predict function
 @app.route('/predict', methods= ['POST']) # endpoint url will contain /predict
 def predict():
+    """display the prediction page"""
 
-    # if the predict button is clicked run this if block
-    if request.form.get("predict") == "predict":
-        # execute this try block if the predict button is clicked
-        try:
+    if request.method == 'POST':
+        data_dict = request.form.to_dict() # convert the form fields to dictionary
+        # the dictionary above also returns a value for the predict button as an empty string,
+        # we'll subset this dictionary using a condition
+        a_subset = {key: value for key, value in data_dict.items() if value != ''}
+        data_list = list(a_subset.values()) # convert the values of the dictionary to list
 
-            loaded_model = load('model.pkl') # load model and assign to variable
+        # get the index of the vaues in the list
+        sex = data_list[0]; pclass = data_list[2]; age = data_list[3]; sibsp = data_list[4]; parch = data_list[5]
+        fare = data_list[6]; embarked = data_list[1]
 
-            # get the form values by referencing the `name` attribute for each input in the form
-            pclass = request.form.get('Pclass')
-            sex = request.form.get('Sex_male')
-            age = request.form.get('Age')
-            fare = request.form.get('Fare')
-            embarked = request.form.get('Embarked_Q')
-            embarked2 = request.form.get('Embarked_S')
+        # order the values in the format of the training data
+        ord_data_list = [pclass, sex, age, sibsp, parch, fare, embarked]
 
-            
-            # get all input values from form as a list of tuples
-            data_list = [
-                        (pclass), (sex),
-                        (age), (fare),
-                        (embarked), (embarked2)
-                        ]
+        # convert the ordered values to integers
+        data_ints = list(map(int, ord_data_list)) 
 
-            # convert list of tuples to an array of appropriate shape and then to a dataframe
-            query_df = pd.DataFrame(np.array(data_list).reshape(1, -1))
+        print('@@ Raw Data = ', data_ints)
+        prediction = predict_survivors(data_ints)
 
-            # get the dummy variables of the dataframe
-            dummy_var = pd.get_dummies(query_df)
+        if prediction >= 0.5: # Adjust the threshold to capture more defaulters due to class imbalance of the training data
+            pred = 'Survived'
+        else:
+            pred = 'Died'
 
-            # display survived if the predicted value is 1 else display died
-            prediction = "".join(['Survived' if loaded_model.predict(dummy_var.values) == 1 else 'Died'])
-
-            # return result.html which holds the prediction value
-            return render_template("result.html" , prediction = prediction)
-
-        except: # if model is not loaded, return the strings below
-
-            return ("<h2> No model Loaded! <br><br> Please Train Model First... </h2>")
-
-    # else if the train button is clicked
-    elif request.form.get("train") == "train":
-
-        # use the exec function to run a python script
-        exec(open("./model.py").read())
-
-        return "<h2> Model Trained! </h2>"
+    return render_template('./result.html', prediction = pred)
 
         
 # function that prints the head of the cleaned dataset
@@ -75,7 +79,7 @@ def predict():
 def get_head_tail_info():
 
     # get the cleaned dataset
-    read_file = pd.read_csv('./dataset.csv')
+    read_file = pd.read_csv('./datasets/titanic_clean.csv')
 
     # get the form submit button whose name is head and value is head
     if request.form.get("head") == "head":
@@ -94,13 +98,4 @@ def get_head_tail_info():
 
 # write the main function
 if __name__ == '__main__':
-
-    try:
-        port = int(sys.argv[1]) # incase a command line port argument is specified use it as default port
-
-    except:
-
-        port = 13579 # if not use this
-
-
-    app.run(port = port, debug = True)
+    app.run(debug=True)

@@ -84,12 +84,12 @@ def get_head_tail_info():
     # get the form submit button whose name is head and value is head
     if request.form.get("head") == "head":
         # show just the head
-        return read_file.head().to_html()
+        return read_file.head(10).to_html()
 
     # get the form submit button whose name is tail and value is tail
     elif request.form.get("tail") == "tail":
         # show just the tail
-        return read_file.tail().to_html()
+        return read_file.tail(10).to_html()
 
     # get the form submit button whose name is info and value is info
     elif request.form.get('info') == "info":
